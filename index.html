@@ -425,10 +425,15 @@ const App = () => {
         const arrayBuffer = await response.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
-        setCertificateData(json);
+
+        let allData = [];
+        workbook.SheetNames.forEach(sheetName => {
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+            allData = allData.concat(json);
+        });
+
+        setCertificateData(allData);
       } catch (e) {
         console.error("Fallo al cargar o procesar database.xlsx:", e);
         setError('No se pudo cargar la base de datos. Asegúrese de que el archivo "database.xlsx" se encuentre en la misma carpeta que este archivo HTML y que sea accesible.');
