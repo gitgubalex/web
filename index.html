@@ -10,6 +10,8 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- SheetJS for reading Excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <style>
         @keyframes fade-in {
@@ -39,42 +41,6 @@
   <body>
     <div id="root"></div>
     <script type="text/babel">
-// ============================================================================
-// DATABASE
-// ============================================================================
-
-/*
- * INSTRUCCIONES IMPORTANTES PARA QUE LA APP FUNCIONE:
- * 1. Convierta su archivo Excel (database.xlsx) a formato JSON.
- *    Puede usar una herramienta en línea como: https://www.beautifyconverter.com/excel-to-json-converter.php
- * 2. Copie el resultado JSON que genera la herramienta.
- * 3. Pegue el JSON que copió adentro de los corchetes `[]` de abajo, reemplazando este texto de ejemplo.
- *
- * Asegúrese de que el resultado sea un array de objetos, como se muestra en el ejemplo.
- * Ejemplo: [ { "Folio": "VAL-001", "Nombre": "Juan Perez" }, { "Folio": "VAL-002", "Nombre": "Ana Gomez" } ]
-*/
-const DATABASE_JSON = [
-  // <<< PEGUE SU BASE DE DATOS JSON AQUÍ
-  {
-    "Folio": "CONST-2024-00001",
-    "Nombre": "Juan Pérez (Ejemplo)",
-    "Curso/Taller": "Introducción a la Programación",
-    "Fecha": "15 de enero de 2024",
-    "Duración": "20 horas",
-    "Departamento": "Tecnologías de la Información"
-  },
-  {
-    "Folio": "CONST-2024-00002",
-    "Nombre del Titular": "María García (Ejemplo)",
-    "Nombre del curso-taller": "Diseño Gráfico Avanzado",
-    "Fecha del curso-taller": "2024-02-20",
-    "Duración": "40 horas",
-    "Departamento": "Diseño"
-  }
-  // <<< FIN DEL ÁREA PARA PEGAR
-];
-
-
 // ============================================================================
 // UTILS & TYPES
 // ============================================================================
@@ -246,6 +212,9 @@ const DownloadIcon = (props) => (
   </svg>
 );
 
+const SpinnerIcon = (props) => (
+    <div className="h-8 w-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin" {...props}></div>
+);
 
 // ============================================================================
 // COMPONENTS
@@ -342,7 +311,7 @@ const ValidationResult = ({ status, result }) => {
         yPos += (textLines.length * 5) + (fieldGap - 5);
     };
 
-    const folio = getFlexibleProperty(result, ['Folio']);
+    const folio = getFlexibleProperty(result, ['Folio', 'ID', 'Clave', 'Constancia']);
     addField('Folio:', folio);
     addField('Nombre del Titular:', getFlexibleProperty(result, ['Nombre', 'Nombre del Titular']));
     addField('Curso/Taller:', getFlexibleProperty(result, ['Curso', 'Nombre del curso-taller', 'Curso/Taller']));
@@ -388,7 +357,7 @@ const ValidationResult = ({ status, result }) => {
           </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-green-200 pt-4">
-          <ResultItem label="Folio" value={<span className="font-mono bg-green-100 px-2 py-1 rounded">{getFlexibleProperty(result, ['Folio'])}</span>} />
+          <ResultItem label="Folio" value={<span className="font-mono bg-green-100 px-2 py-1 rounded">{getFlexibleProperty(result, ['Folio', 'ID', 'Clave', 'Constancia'])}</span>} />
           <ResultItem label="Nombre del Titular" value={getFlexibleProperty(result, ['Nombre', 'Nombre del Titular'])} />
           <ResultItem label="Nombre del curso-taller" value={getFlexibleProperty(result, ['Curso', 'Nombre del curso-taller', 'Curso/Taller'])} />
           <ResultItem label="Fecha del curso-taller" value={formatDate(getFlexibleProperty(result, ['Fecha', 'Fecha del curso-taller']))} />
@@ -438,13 +407,37 @@ const ValidationResult = ({ status, result }) => {
 const App = () => {
   const { useState, useEffect } = React;
   
-  // Search state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [certificateData, setCertificateData] = useState([]);
+  
   const [query, setQuery] = useState('');
   const [validationStatus, setValidationStatus] = useState(ValidationStatus.IDLE);
   const [validationResult, setValidationResult] = useState(null);
-  
-  // Database state - Data is now loaded directly from the embedded JSON object.
-  const [certificateData, setCertificateData] = useState(DATABASE_JSON);
+
+  useEffect(() => {
+    const loadDatabase = async () => {
+      try {
+        const response = await fetch('database.xlsx');
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
+        setCertificateData(json);
+      } catch (e) {
+        console.error("Fallo al cargar o procesar database.xlsx:", e);
+        setError('No se pudo cargar la base de datos. Asegúrese de que el archivo "database.xlsx" se encuentre en la misma carpeta que este archivo HTML y que sea accesible.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadDatabase();
+  }, []);
 
   useEffect(() => {
     if (validationStatus === ValidationStatus.SUCCESS) {
@@ -463,7 +456,7 @@ const App = () => {
 
     const cleanedQuery = searchQuery.trim().toLowerCase();
     const result = certificateData.find(record => {
-        const folioValue = getProperty(record, 'Folio');
+        const folioValue = getFlexibleProperty(record, ['Folio', 'ID', 'Clave', 'Constancia', 'Folio de Constancia']);
         return folioValue !== null && typeof folioValue !== 'undefined' && String(folioValue).trim().toLowerCase() === cleanedQuery;
     });
 
@@ -481,6 +474,39 @@ const App = () => {
     setValidationStatus(ValidationStatus.IDLE);
     setValidationResult(null);
   };
+  
+  const renderContent = () => {
+      if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center p-10 bg-white rounded-lg shadow-md animate-fade-in">
+                <SpinnerIcon />
+                <p className="mt-4 text-slate-600 font-semibold">Cargando base de datos...</p>
+            </div>
+        );
+      }
+      if (error) {
+          return (
+            <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-lg flex items-start space-x-4 animate-fade-in">
+                <XCircleIcon className="h-6 w-6 flex-shrink-0 mt-0.5" />
+                <div>
+                    <p className="font-bold text-lg">Error al Cargar</p>
+                    <p className="mt-1">{error}</p>
+                </div>
+            </div>
+          );
+      }
+      return (
+          <div className="animate-fade-in">
+              <SearchBar 
+                  onSearch={handleSearch} 
+                  onClear={handleClear} 
+                  query={query}
+                  setQuery={setQuery}
+              />
+              <ValidationResult status={validationStatus} result={validationResult} />
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-800 flex flex-col">
@@ -497,26 +523,7 @@ const App = () => {
       
       <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8 flex items-start justify-center">
         <div className="w-full max-w-3xl mx-auto">
-          {certificateData && certificateData.length > 0 ? (
-              <div className="animate-fade-in">
-                  <SearchBar 
-                      onSearch={handleSearch} 
-                      onClear={handleClear} 
-                      query={query}
-                      setQuery={setQuery}
-                  />
-                  <ValidationResult status={validationStatus} result={validationResult} />
-              </div>
-          ) : (
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-6 rounded-lg flex items-start space-x-4 animate-fade-in">
-                <InfoIcon className="h-6 w-6 flex-shrink-0 mt-0.5" />
-                <div>
-                    <p className="font-bold text-lg">Base de Datos Vacía o con Errores</p>
-                    <p className="mt-1">No se encontró ninguna información en la base de datos.</p>
-                    <p className="mt-2 text-sm">Por favor, edite este archivo HTML y asegúrese de haber pegado correctamente los datos en formato JSON en la variable <code>DATABASE_JSON</code>.</p>
-                </div>
-            </div>
-          )}
+          {renderContent()}
         </div>
       </main>
 
