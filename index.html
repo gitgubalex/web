@@ -328,6 +328,8 @@ const ValidationResult = ({ status, result }) => {
     doc.text(`Este documento es una representación digital para la verificación de la constancia.`, 105, yPos, { align: 'center' });
     yPos += 5;
     doc.text(`Generado el: ${new Date().toLocaleString('es-ES')}`, 105, yPos, { align: 'center' });
+    yPos += 5;
+    doc.text(`Contacto para dudas o aclaraciones: coord_actualizaciondocente@itdurango.edu.mx`, 105, yPos, { align: 'center' });
 
     doc.save(`Validacion-${folio || 'INVALIDA'}.pdf`);
   };
