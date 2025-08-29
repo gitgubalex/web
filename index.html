@@ -32,8 +32,12 @@
     <audio id="beep-fail" src="https://cdn.jsdelivr.net/gh/gitbubs/my-apps-3/fail.mp3" preload="auto"></audio>
     <script type="text/babel">
     // ============================================================================
-    // UTILS
+    // CONFIG & UTILS
     // ============================================================================
+    
+    // <-- ¡IMPORTANTE! Reemplace con la URL real de su logo.
+    const LOGO_URL = 'https://gitgubalex.github.io/web/image.jpg'; 
+
     const ValidationStatus = { IDLE: 'idle', SUCCESS: 'success', NOT_FOUND: 'not_found', ERROR: 'error' };
 
     const getProperty = (obj, keyName) => {
@@ -55,11 +59,10 @@
     const formatDate = (dateValue) => {
         if (dateValue === undefined || dateValue === null) return 'N/A';
         if (typeof dateValue === 'string') {
-            // Check if it's a number in a string
              if (!isNaN(dateValue) && !isNaN(parseFloat(dateValue))) {
                  let date = new Date((parseFloat(dateValue) - 25569) * 86400 * 1000);
                  date = new Date(date.valueOf() + date.getTimezoneOffset() * 60000);
-                 if (isNaN(date.getTime())) return String(dateValue); // Fallback
+                 if (isNaN(date.getTime())) return String(dateValue);
                  return date.toLocaleDateString('es-ES',{ day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
              }
              return dateValue.toUpperCase();
@@ -75,7 +78,6 @@
         return date.toLocaleDateString('es-ES',{ day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
     };
 
-
     const playSound = (id) => {
         const sound = document.getElementById(id);
         if (sound) {
@@ -87,9 +89,40 @@
     // ============================================================================
     // PDF Generation
     // ============================================================================
-    const generatePdf = (result) => {
+    const getImageDataFromURL = (url) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const dataURL = canvas.toDataURL('image/jpeg');
+          resolve({ dataURL, width: img.width, height: img.height });
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+    };
+
+    const generatePdf = async (result) => {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+
+        try {
+            const { dataURL, width, height } = await getImageDataFromURL(LOGO_URL);
+            const aspectRatio = width / height;
+            
+            // Se establece una altura fija y se calcula el ancho para mantener la proporción, evitando distorsión.
+            const pdfImageHeight = 25;
+            const pdfImageWidth = pdfImageHeight * aspectRatio;
+
+            doc.addImage(dataURL, 'JPEG', 15, 12, pdfImageWidth, pdfImageHeight);
+        } catch (error) {
+            console.error("No se pudo agregar el logo al PDF:", error);
+        }
 
         // Header
         doc.setFont("helvetica", "bold");
@@ -118,14 +151,9 @@
         const getDisplayValue = (key, value) => {
           if (value === null || value === undefined) return 'N/A';
           let valueStr = String(value).trim();
-
-          if (key === 'Fecha') {
-            return formatDate(value);
-          }
+          if (key === 'Fecha') return formatDate(value);
           if (key === 'Duración') {
-             if (!isNaN(valueStr) && valueStr !== '') {
-                 return `${valueStr} HORAS`;
-             }
+             if (!isNaN(valueStr) && valueStr !== '') return `${valueStr} HORAS`;
              return valueStr.toUpperCase();
           }
           return valueStr.toUpperCase();
@@ -134,12 +162,10 @@
         Object.entries(data).forEach(([key, value]) => {
             doc.setFont("helvetica", "bold");
             doc.text(`${key}:`, labelX, y);
-            
             doc.setFont("helvetica", "normal");
             const displayValue = getDisplayValue(key, value);
             const lines = doc.splitTextToSize(displayValue, 120);
             doc.text(lines, valueX, y);
-            
             y += (lines.length * 7) + 5;
         });
 
@@ -149,20 +175,16 @@
         doc.setLineWidth(0.2);
         doc.line(20, y, 190, y);
         y += 10;
-
         doc.setFontSize(9);
         doc.setTextColor(150, 150, 150);
         doc.setFont("helvetica", "normal");
-
         doc.text("Este documento es una representación digital para la verificación de la constancia.", 105, y, { align: 'center' });
         y += 5;
-        
         const now = new Date();
         const generatedDate = now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
         const generatedTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         doc.text(`Generado el: ${generatedDate}, ${generatedTime}`, 105, y, { align: 'center' });
         y += 5;
-
         doc.text("Contacto para dudas o aclaraciones: coord_actualizaciondocente@itdurango.edu.mx", 105, y, { align: 'center' });
 
         doc.save(`Constancia-Validez-${getFlexibleProperty(result, ['Folio', 'ID']) || 'Certificado'}.pdf`);
@@ -174,7 +196,7 @@
     const Header = () => (
       <header className="bg-white shadow-sm w-full">
         <div className="container mx-auto px-6 py-4 flex items-center">
-          <svg className="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <img src={LOGO_URL} alt="Logo ITD" className="h-10 mr-4"/>
           <h1 className="text-xl font-bold text-gray-800">Validador de Constancias y Reconocimientos del ITD</h1>
         </div>
       </header>
@@ -223,6 +245,22 @@
     };
 
     const ValidationResult = ({ status, result }) => {
+      const { useState } = React;
+      const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+      const handleDownload = async () => {
+        if (!result) return;
+        setIsGeneratingPdf(true);
+        try {
+          await generatePdf(result);
+        } catch (error) {
+          console.error("PDF Generation failed", error);
+          alert("Hubo un error al generar el PDF.");
+        } finally {
+          setIsGeneratingPdf(false);
+        }
+      };
+
       if (status === ValidationStatus.IDLE) return null;
 
       if (status === ValidationStatus.NOT_FOUND) {
@@ -257,9 +295,24 @@
                         <svg className="w-8 h-8 text-green-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         <h3 className="text-lg font-bold text-green-800">Constancia Válida</h3>
                     </div>
-                    <button onClick={() => generatePdf(result)} className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition duration-200">
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        Descargar Validación
+                    <button 
+                        onClick={handleDownload} 
+                        disabled={isGeneratingPdf}
+                        className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition duration-200 disabled:bg-blue-400 disabled:cursor-not-allowed">
+                        {isGeneratingPdf ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Generando...
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                Descargar Validación
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
