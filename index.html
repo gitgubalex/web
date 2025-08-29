@@ -3,23 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Validador de Constancias y Reconocimientos ITD</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"/>
+  <title>Validador de Constancias y Reconocimientos del ITD</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.0/dist/tailwind.min.css"/>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
   <style>
-    @keyframes fade-in { 0% { opacity: 0; transform: translateY(10px);} 100% { opacity: 1; transform: translateY(0);} }
-    .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .animate-spin { animation: spin 1s linear infinite; }
+    body { background: #F5F7FA; }
+    .shadow-card { box-shadow: 0 4px 24px rgba(30, 41, 59, 0.08); }
+    .search-icon { width: 22px; height: 22px; color: #64748b; }
+    .btn-main { background: #4338ca; }
+    .btn-main:hover { background: #312e81; }
+    .btn-gray { background: #e5e7eb; color: #64748b; }
+    .btn-gray:hover { background: #cbd5e1; }
+    .input-focus:focus { border-color: #4338ca; }
+    .valid-card { background: #e8fbe7; border-left: 6px solid #22c55e; }
+    .error-card { background: #fdeaea; border-left: 6px solid #ef4444; }
+    .fade-in { animation: fade-in .4s ease; }
+    @keyframes fade-in {
+      0% { opacity: 0; transform: translateY(16px);}
+      100% { opacity: 1; transform: translateY(0);}
+    }
   </style>
 </head>
-<body class="bg-slate-100 font-sans">
+<body>
   <div id="root"></div>
   <script type="text/babel">
-    // Sonido éxito y error
+    // Sonidos
     const playSound = type => {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (!ctx) return;
@@ -27,19 +38,19 @@
       const gain = ctx.createGain();
       osc.type = type === "success" ? "sine" : "sawtooth";
       osc.frequency.value = type === "success" ? 659 : 164;
-      gain.gain.value = 0.15;
-      gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+      gain.gain.value = 0.12;
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.35);
+      osc.stop(ctx.currentTime + 0.35);
     };
 
-    const ValidationStatus = { IDLE: 'idle', SUCCESS: 'success', NOT_FOUND: 'not_found', ERROR: 'error' };
+    const ValidationStatus = { IDLE: "idle", SUCCESS: "success", NOT_FOUND: "not_found", ERROR: "error" };
 
     // Utilidad para buscar propiedades flexibles
     const getFlexibleProperty = (obj, keys) => {
-      if (!obj || typeof obj !== 'object' || !Array.isArray(keys)) return undefined;
+      if (!obj || typeof obj !== "object" || !Array.isArray(keys)) return undefined;
       for (const key of keys) {
         const value = obj[key] || obj[key.toLowerCase()] || obj[key.toUpperCase()];
         if (value !== undefined && value !== null) return value;
@@ -47,131 +58,168 @@
       return undefined;
     };
 
-    // Formato de fecha
-    const formatDate = d => typeof d === 'number' ? new Date((d - 25569) * 86400 * 1000).toLocaleDateString('es-ES') : d;
+    // Formato fecha
+    const formatDate = d => typeof d === "number" ? new Date((d - 25569) * 86400 * 1000).toLocaleDateString("es-ES") : d;
 
-    // Barra de búsqueda
-    const SearchBar = ({ query, setQuery, onSearch, onClear }) => (
-      <form className="flex flex-col items-center mb-8" onSubmit={e => { e.preventDefault(); onSearch(query); }}>
-        <span className="mb-3 text-slate-700 font-semibold text-base">
-          Ingresa Folio de Constancia o Reconocimiento
-        </span>
-        <div className="flex items-center space-x-2 w-full max-w-xl">
-          <input
-            type="text"
-            className="flex-grow px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 placeholder-slate-400"
-            placeholder="TNM-054-XX-2025-XX"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            autoFocus
-          />
-          <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition">
-            Buscar
-          </button>
-          <button type="button" className="px-3 py-2 bg-slate-200 text-slate-700 font-semibold rounded-md hover:bg-slate-300 transition" onClick={onClear}>
-            Limpiar
-          </button>
+    // Iconos
+    const SearchIcon = () => (
+      <svg className="search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    );
+    const CheckIcon = () => (
+      <svg className="inline mr-2" width="28" height="28" fill="none" stroke="#22c55e" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="#22c55e" />
+        <path stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M8 12l2 2 4-4" />
+      </svg>
+    );
+    const XIcon = () => (
+      <svg className="inline mr-2" width="28" height="28" fill="none" stroke="#ef4444" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="#ef4444" />
+        <path stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M8 8l8 8M16 8l-8 8" />
+      </svg>
+    );
+    const DownloadIcon = () => (
+      <svg className="inline mr-2" width="20" height="20" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24">
+        <path stroke="#fff" strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12l7 7 7-7" />
+      </svg>
+    );
+
+    // --- Barra de búsqueda ---
+    const SearchBar = ({ query, setQuery, onSearch, onClear, loading }) => (
+      <form className="flex flex-col items-center w-full fade-in" onSubmit={e => { e.preventDefault(); onSearch(query); }}>
+        <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-card py-8 px-7 mb-8">
+          <h2 className="text-2xl font-semibold text-slate-900 mb-1">Buscar Constancia</h2>
+          <p className="text-slate-600 mb-5">Ingrese el folio de la constancia para verificar su validez.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-grow">
+              <span className="absolute left-3 top-3"><SearchIcon /></span>
+              <input
+                type="text"
+                className="w-full pl-10 pr-3 py-3 border rounded-md leading-5 bg-white placeholder-slate-400 text-slate-900 focus:outline-none input-focus focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-lg"
+                placeholder="Ej: TNM-054-00-2025-123"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                autoFocus
+                disabled={loading}
+              />
+            </div>
+            <button
+              type="submit"
+              className={`px-7 py-3 text-lg font-semibold rounded-md transition-colors btn-main text-white ${!query ? "opacity-60 cursor-not-allowed" : ""}`}
+              disabled={!query || loading}
+            >
+              Verificar
+            </button>
+            <button
+              type="button"
+              className="px-7 py-3 text-lg font-semibold rounded-md transition-colors btn-gray"
+              onClick={onClear}
+              disabled={loading}
+            >
+              Borrar
+            </button>
+          </div>
         </div>
       </form>
     );
 
-    // Componente resultado encontrado (verde) y no encontrado (rojo)
+    // --- Resultado de validación ---
     const ValidationResult = ({ status, result }) => {
       React.useEffect(() => {
         if (status === ValidationStatus.SUCCESS) playSound("success");
         if (status === ValidationStatus.NOT_FOUND) playSound("error");
       }, [status]);
 
-      // Descarga PDF con diseño profesional
+      // PDF profesional
       const handleDownloadPdf = () => {
         if (!result) return;
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        doc.setFillColor(233, 251, 237);
-        doc.rect(10, 10, 190, 70, "F");
+        doc.setFillColor(232,251,231);
+        doc.rect(10,10,190,70,"F");
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
-        doc.setTextColor(40, 167, 69);
+        doc.setTextColor(34,197,94);
         doc.text("✔ Constancia Válida", 15, 22);
 
-        doc.setDrawColor(40, 167, 69);
-        doc.line(15, 25, 195, 25);
+        doc.setDrawColor(34,197,94);
+        doc.line(15,25,195,25);
 
         doc.setFont("helvetica", "normal");
         doc.setFontSize(12);
-        doc.setTextColor(0, 0, 0);
-        const folio = getFlexibleProperty(result, ['Folio','ID','Clave','Constancia','Folio de Constancia']);
-        doc.setFillColor(220, 251, 223);
-        doc.roundedRect(15, 32, 55, 10, 2, 2, "F");
+        doc.setTextColor(0,0,0);
         doc.text("Folio", 16, 39);
         doc.setFont("courier", "bold");
-        doc.text(String(folio), 40, 39);
-
-        doc.setFont("helvetica", "normal");
-        doc.text("Nombre del Titular", 80, 39);
+        doc.text(String(getFlexibleProperty(result, ["Folio","ID","Clave","Constancia","Folio de Constancia"])), 50, 39);
+        doc.setFont("helvetica","normal");
+        doc.text("Nombre del Titular", 110, 39);
         doc.setFont("helvetica", "bold");
-        doc.text(String(getFlexibleProperty(result, ['Nombre','Nombre del Titular'])), 120, 39);
+        doc.text(String(getFlexibleProperty(result, ["Nombre","Nombre del Titular"])), 150, 39);
 
         doc.setFont("helvetica", "normal");
         doc.text("Nombre del curso-taller", 16, 49);
         doc.setFont("helvetica", "bold");
-        doc.text(String(getFlexibleProperty(result, ['Curso','Curso-Taller','Nombre del curso-taller'])), 65, 49);
+        doc.text(String(getFlexibleProperty(result, ["Curso","Curso-Taller","Nombre del curso-taller"])), 70, 49);
 
         doc.setFont("helvetica", "normal");
-        doc.text("Fecha del curso-taller", 80, 49);
+        doc.text("Fecha del curso-taller", 110, 49);
         doc.setFont("helvetica", "bold");
-        doc.text(String(getFlexibleProperty(result, ['Fecha','Fecha del curso-taller'])), 120, 49);
+        doc.text(String(getFlexibleProperty(result, ["Fecha","Fecha del curso-taller"])), 150, 49);
 
         doc.setFont("helvetica", "normal");
         doc.text("Departamento", 16, 59);
         doc.setFont("helvetica", "bold");
-        doc.text(String(getFlexibleProperty(result, ['Departamento'])), 45, 59);
+        doc.text(String(getFlexibleProperty(result, ["Departamento"])), 50, 59);
 
         doc.setFont("helvetica", "normal");
-        doc.text("Duración", 80, 59);
+        doc.text("Duración", 110, 59);
         doc.setFont("helvetica", "bold");
-        doc.text(String(getFlexibleProperty(result, ['Duracion','Duración'])), 100, 59);
+        doc.text(String(getFlexibleProperty(result, ["Duracion","Duración"])), 130, 59);
 
-        doc.save(`Validacion-${folio || 'INDETERMINADO'}.pdf`);
+        doc.save(`Validacion-${getFlexibleProperty(result, ["Folio","ID","Clave","Constancia","Folio de Constancia"]) || 'INDETERMINADO'}.pdf`);
       };
 
       if (status === ValidationStatus.NOT_FOUND)
         return (
-          <div className="max-w-xl mx-auto mt-4 p-6 bg-red-50 border-l-4 border-red-500 rounded-lg animate-fade-in flex items-center">
-            <span className="mr-4 text-2xl text-red-600">✖</span>
-            <div>
-              <h2 className="text-xl font-bold text-red-700 mb-2">Constancia No Encontrada</h2>
-              <p className="text-red-800">El folio ingresado no fue encontrado. Inténtalo de nuevo.</p>
+          <div className="w-full max-w-2xl mx-auto error-card rounded-2xl shadow-card py-6 px-7 mt-2 fade-in flex items-center">
+            <XIcon />
+            <div className="ml-2">
+              <h2 className="text-2xl font-bold text-red-700 mb-2">Constancia no Encontrada</h2>
+              <p className="text-red-800 text-lg">
+                El folio ingresado no fue encontrado en la base de datos. Por favor, verifique el folio e intente de nuevo.
+              </p>
             </div>
           </div>
         );
       if (status === ValidationStatus.SUCCESS && result) {
-        const folio = getFlexibleProperty(result, ['Folio','ID','Clave','Constancia','Folio de Constancia']);
-        const nombre = getFlexibleProperty(result, ['Nombre','Nombre del Titular']);
-        const curso = getFlexibleProperty(result, ['Curso','Curso-Taller','Nombre del curso-taller']);
-        const fecha = getFlexibleProperty(result, ['Fecha','Fecha del curso-taller']);
-        const departamento = getFlexibleProperty(result, ['Departamento']);
-        const duracion = getFlexibleProperty(result, ['Duracion','Duración']);
+        const folio = getFlexibleProperty(result, ["Folio","ID","Clave","Constancia","Folio de Constancia"]);
+        const nombre = getFlexibleProperty(result, ["Nombre","Nombre del Titular"]);
+        const curso = getFlexibleProperty(result, ["Curso","Curso-Taller","Nombre del curso-taller"]);
+        const fecha = getFlexibleProperty(result, ["Fecha","Fecha del curso-taller"]);
+        const departamento = getFlexibleProperty(result, ["Departamento"]);
+        const duracion = getFlexibleProperty(result, ["Duracion","Duración"]);
         return (
-          <div className="max-w-xl mx-auto mt-6 p-6 bg-green-50 border-l-4 border-green-500 rounded-lg animate-fade-in">
+          <div className="w-full max-w-2xl mx-auto valid-card rounded-2xl shadow-card py-6 px-7 mt-2 fade-in">
             <div className="flex justify-between items-center mb-2">
-              <div className="flex items-center">
-                <span className="text-green-600 mr-2 text-2xl">✔</span>
-                <h2 className="text-xl font-bold text-green-700">Constancia Válida</h2>
+              <div className="flex items-center text-green-700">
+                <CheckIcon />
+                <h2 className="text-2xl font-bold">Constancia Válida</h2>
               </div>
-              <button onClick={handleDownloadPdf} className="flex items-center px-4 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 transition">
-                <span className="mr-2">⬇️</span> Descargar Validación
+              <button onClick={handleDownloadPdf} className="flex items-center px-5 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 transition text-lg">
+                <DownloadIcon /> Descargar Validación
               </button>
             </div>
-            <hr className="my-2 border-green-200"/>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-8 mt-2">
+            <hr className="my-3 border-green-200"/>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8 mt-2">
               <div>
                 <div className="font-semibold text-slate-500">Folio</div>
-                <div className="font-mono bg-green-100 px-2 py-1 rounded text-green-800">{folio}</div>
+                <div className="font-mono bg-green-100 px-2 py-1 rounded text-green-800 text-lg">{folio}</div>
               </div>
               <div>
                 <div className="font-semibold text-slate-500">Nombre del Titular</div>
-                <div className="font-bold">{nombre}</div>
+                <div className="font-bold text-lg">{nombre}</div>
               </div>
               <div>
                 <div className="font-semibold text-slate-500">Nombre del curso-taller</div>
@@ -201,7 +249,7 @@
       const { useState, useEffect } = React;
       const [loading, setLoading] = useState(true);
       const [certificateData, setCertificateData] = useState([]);
-      const [query, setQuery] = useState('');
+      const [query, setQuery] = useState("");
       const [validationStatus, setValidationStatus] = useState(ValidationStatus.IDLE);
       const [validationResult, setValidationResult] = useState(null);
 
@@ -240,35 +288,36 @@
         if (!searchQuery || certificateData.length === 0) { setValidationStatus(ValidationStatus.IDLE); setValidationResult(null); return; }
         const cleanedQuery = searchQuery.trim().toLowerCase();
         const result = certificateData.find(record => {
-          const folioValue = getFlexibleProperty(record, ['Folio','ID','Clave','Constancia','Folio de Constancia']);
+          const folioValue = getFlexibleProperty(record, ["Folio","ID","Clave","Constancia","Folio de Constancia"]);
           return folioValue && String(folioValue).trim().toLowerCase() === cleanedQuery;
         });
         if (result) { setValidationResult(result); setValidationStatus(ValidationStatus.SUCCESS); }
         else { setValidationResult(null); setValidationStatus(ValidationStatus.NOT_FOUND); }
       };
 
-      const handleClear = () => { setQuery(''); setValidationStatus(ValidationStatus.IDLE); setValidationResult(null); };
+      const handleClear = () => { setQuery(""); setValidationStatus(ValidationStatus.IDLE); setValidationResult(null); };
 
       return (
-        <div className="min-h-screen bg-slate-100 flex flex-col">
-          <header className="bg-white shadow-sm sticky top-0 z-10 p-4">
-            <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight">
+        <div className="min-h-screen flex flex-col bg-[#F5F7FA]">
+          <header className="w-full bg-white border-b border-slate-200 py-4 px-6 flex items-center">
+            <span className="mr-3 text-blue-600"><CheckIcon /></span>
+            <span className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Validador de Constancias y Reconocimientos del ITD
-            </h1>
+            </span>
           </header>
-          <main className="flex-grow container mx-auto p-6">
-            <SearchBar query={query} setQuery={setQuery} onSearch={handleSearch} onClear={handleClear} />
+          <main className="flex-grow w-full flex flex-col items-center pt-7">
+            <SearchBar query={query} setQuery={setQuery} onSearch={handleSearch} onClear={handleClear} loading={loading} />
             <ValidationResult status={validationStatus} result={validationResult} />
           </main>
-          <footer className="py-6 text-center text-slate-500 text-sm flex flex-col items-center">
-            <span className="font-bold">Desarrollo académico, coordinación de actualización docente del ITD.</span>
-            <span>© {new Date().getFullYear()} Validador de Constancias. Todos los derechos reservados.</span>
+          <footer className="py-7 text-center text-slate-500 text-base flex flex-col items-center">
+            <span>© 2025 Validador de Constancias. Todos los derechos reservados.</span>
+            <span className="mt-1">Desarrollo académico, coordinación de actualización docente del ITD.</span>
           </footer>
         </div>
       );
     };
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
+    const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<React.StrictMode><App /></React.StrictMode>);
   </script>
 </body>
