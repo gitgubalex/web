@@ -12,26 +12,42 @@
 <body class="bg-slate-100">
   <div id="root"></div>
   <script type="text/babel">
-    // ICONS OMITIDOS (como en tu archivo original)
-    // ...[icon components]...
 
-    // ============================================================================
-    // COMPONENTES OMITIDOS: FileUploader, PasswordPrompt, etc. que solo servían para subir archivos manualmente
-    // Ya no son necesarios y se han removido.
+    // --------------------- ICONOS ---------------------
+    // Puedes reemplazar estos componentes por tus SVGs favoritos
+    const SearchIcon = (props) => (
+      <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
+      </svg>
+    );
+    const LogoIcon = (props) => (
+      <svg {...props} fill="none" viewBox="0 0 32 32" stroke="currentColor">
+        <circle cx="16" cy="16" r="15" stroke="blue" strokeWidth="2" fill="#0ea5e9"/>
+        <text x="50%" y="55%" textAnchor="middle" fill="white" fontSize="12" fontFamily="Arial" dy=".3em">ITD</text>
+      </svg>
+    );
 
-    const SearchBar = ({ onSearch, onClear, query, setQuery }) => {
+    // --------------------- ENUMS Y ESTADOS ---------------------
+    const ValidationStatus = {
+      IDLE: 'IDLE',
+      FOUND: 'FOUND',
+      NOT_FOUND: 'NOT_FOUND',
+      ERROR: 'ERROR'
+    };
+
+    // --------------------- COMPONENTES ---------------------
+    const SearchBar = ({ onSearch, onClear, query, setQuery, loading }) => {
       const handleInputChange = (e) => {
         setQuery(e.target.value);
       };
-
       const handleSubmit = (e) => {
         e.preventDefault();
         if (query) onSearch(query);
       };
-
       const handleClearClick = () => {
         onClear();
-      }
+      };
 
       return (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
@@ -50,19 +66,21 @@
                   placeholder="Ej: TNM-054-00-2025-123"
                   className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-400 focus:outline-none focus:placeholder-slate-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all"
                   aria-label="Folio de la constancia o reconocimiento"
+                  disabled={loading}
                 />
               </div>
               <button
                 type="submit"
                 className="px-6 py-3 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
-                disabled={!query}
+                disabled={!query || loading}
               >
-                Verificar
+                {loading ? "Buscando..." : "Verificar"}
               </button>
               <button
                 type="button"
                 onClick={handleClearClick}
                 className="px-6 py-3 text-sm font-semibold text-slate-700 bg-slate-200 rounded-md hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                disabled={loading}
               >
                 Limpiar
               </button>
@@ -72,15 +90,28 @@
       );
     };
 
-    // ...[resto de componentes como ResultItem, etc.]...
+    const ResultItem = ({ data }) => (
+      <div className="bg-white p-6 mt-6 rounded-xl shadow-lg border border-blue-200">
+        <h3 className="text-lg font-bold text-blue-700 mb-2">Constancia encontrada</h3>
+        <ul className="text-slate-700">
+          {Object.entries(data).map(([key, value]) => (
+            <li key={key} className="py-1"><span className="font-semibold">{key}:</span> {String(value)}</li>
+          ))}
+        </ul>
+      </div>
+    );
 
+    // --------------------- APP PRINCIPAL ---------------------
     const App = () => {
+      const [certificateData, setCertificateData] = React.useState([]);
       const [databaseLoaded, setDatabaseLoaded] = React.useState(false);
+      const [databaseError, setDatabaseError] = React.useState(false);
       const [query, setQuery] = React.useState('');
       const [validationStatus, setValidationStatus] = React.useState(ValidationStatus.IDLE);
       const [validationResult, setValidationResult] = React.useState(null);
+      const [loading, setLoading] = React.useState(false);
 
-      // Lógica para cargar automáticamente el archivo database.xlsx (sin opción manual)
+      // --- Carga automática del archivo database.xlsx ---
       const handleFileProcessed = (arrayBuffer) => {
         try {
           const data = new Uint8Array(arrayBuffer);
@@ -89,15 +120,12 @@
           let allData = [];
           workbook.SheetNames.forEach(sheetName => {
             const worksheet = workbook.Sheets[sheetName];
-            if (!worksheet || !worksheet['!ref']) {
-              return;
-            }
+            if (!worksheet || !worksheet['!ref']) return;
             const dataAoA = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
             const headerRowIndex = dataAoA.findIndex(row => Array.isArray(row) && row.some(cell => typeof cell === 'string' && /folio|id|clave|constancia/i.test(cell)));
             if (headerRowIndex === -1) return;
             const headers = dataAoA[headerRowIndex].map(h => (typeof h === 'string' ? h.trim() : h));
             const dataRows = dataAoA.slice(headerRowIndex + 1);
-
             const sheetJson = dataRows
               .filter(row => Array.isArray(row) && row.some(cell => cell != null && String(cell).trim() !== ''))
               .map(row => {
@@ -109,45 +137,113 @@
                 });
                 return record;
               });
-
             allData = allData.concat(sheetJson);
           });
 
           setCertificateData(allData);
           setDatabaseLoaded(true);
+          setDatabaseError(false);
         } catch (e) {
+          setCertificateData([]);
           setDatabaseLoaded(false);
+          setDatabaseError(true);
         }
       };
 
       React.useEffect(() => {
         const loadDatabase = async () => {
           try {
+            setDatabaseLoaded(false);
+            setDatabaseError(false);
             const response = await fetch('https://gitgubalex.github.io/web/database.xlsx');
             if (!response.ok) {
               setDatabaseLoaded(false);
+              setDatabaseError(true);
               return;
             }
             const arrayBuffer = await response.arrayBuffer();
             handleFileProcessed(arrayBuffer);
           } catch (err) {
             setDatabaseLoaded(false);
+            setDatabaseError(true);
           }
         };
         loadDatabase();
       }, []);
 
-      // ...[lógica de búsqueda y renderizado]...
+      // --- Buscador ---
+      const handleSearch = (folio) => {
+        setLoading(true);
+        setValidationStatus(ValidationStatus.IDLE);
+        setValidationResult(null);
 
+        // Normalización para buscar por distintos nombres de columna
+        const result = certificateData.find(
+          record => {
+            const keys = Object.keys(record);
+            for(let k of keys) {
+              if(/folio|id|clave|constancia/i.test(k)) {
+                if(String(record[k]).trim().toLowerCase() === folio.trim().toLowerCase()) {
+                  return true;
+                }
+              }
+            }
+            return false;
+          }
+        );
+        if (result) {
+          setValidationStatus(ValidationStatus.FOUND);
+          setValidationResult(result);
+        } else {
+          setValidationStatus(ValidationStatus.NOT_FOUND);
+          setValidationResult(null);
+        }
+        setLoading(false);
+      };
+
+      const handleClear = () => {
+        setQuery('');
+        setValidationStatus(ValidationStatus.IDLE);
+        setValidationResult(null);
+      };
+
+      // --- Render principal ---
       function renderContent() {
-        // ...[renderizado de formularios y resultados]...
+        if (databaseError) {
+          return (
+            <div className="bg-red-100 border border-red-300 text-red-700 p-6 rounded-xl shadow-lg max-w-xl mx-auto my-8">
+              <h2 className="text-xl font-bold mb-2">Error al cargar la base de datos</h2>
+              <p>No se pudo cargar el archivo <b>database.xlsx</b>. Intente nuevamente más tarde.</p>
+            </div>
+          );
+        }
+        if (!databaseLoaded) {
+          return (
+            <div className="bg-blue-100 border border-blue-300 text-blue-700 p-6 rounded-xl shadow-lg max-w-xl mx-auto my-8">
+              <h2 className="text-xl font-bold mb-2">Cargando base de datos...</h2>
+              <p>Por favor espere unos segundos.</p>
+            </div>
+          );
+        }
         return (
-          <SearchBar
-            onSearch={/* tu función */}
-            onClear={/* tu función */}
-            query={query}
-            setQuery={setQuery}
-          />
+          <>
+            <SearchBar
+              onSearch={handleSearch}
+              onClear={handleClear}
+              query={query}
+              setQuery={setQuery}
+              loading={loading}
+            />
+            {validationStatus === ValidationStatus.FOUND && (
+              <ResultItem data={validationResult} />
+            )}
+            {validationStatus === ValidationStatus.NOT_FOUND && (
+              <div className="bg-yellow-100 border border-yellow-300 text-yellow-700 p-6 mt-6 rounded-xl shadow-lg max-w-xl mx-auto">
+                <h3 className="text-lg font-bold mb-2">No se encontró la constancia</h3>
+                <p>Revise que el folio esté bien escrito e intente nuevamente.</p>
+              </div>
+            )}
+          </>
         );
       }
 
@@ -176,7 +272,7 @@
       );
     };
 
-    // RENDER APP
+    // --------------------- RENDER APP ---------------------
     const rootElement = document.getElementById('root');
     if (!rootElement) {
       throw new Error("Could not find root element to mount to");
@@ -188,6 +284,5 @@
       </React.StrictMode>
     );
   </script>
-  <script type="module" src="/index.tsx"></script>
 </body>
 </html>
